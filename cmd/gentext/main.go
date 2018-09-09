@@ -12,15 +12,17 @@ import (
 )
 
 var (
-	source string
-	count  int
-	seed   int
+	source    string
+	count     int
+	seed      int
+	ngramSize int
 )
 
 func init() {
 	flag.StringVar(&source, "chain", "", "path to the chain file")
 	flag.IntVar(&count, "count", 10, "number of paragraphs to generate")
 	flag.IntVar(&seed, "seed", 0, "random seed")
+	flag.IntVar(&ngramSize, "n", 3, "ngram size in chain")
 	flag.Parse()
 }
 
@@ -36,6 +38,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "file error (%s): %v\n", source, err)
 		os.Exit(1)
 	}
+	defer fh.Close()
 
 	chain, err := markov.ReadDiskChain(fh)
 	if err != nil {
@@ -43,11 +46,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	gen := &randtxt.Generator{Chain: chain}
+	gen := randtxt.NewGenerator(chain, ngramSize)
 
 	paragraphs := make([]string, count)
 	for i := range paragraphs {
-		paragraphs[i] = gen.Paragraph(3, 6)
+		var err error
+		paragraphs[i], err = gen.Paragraph(3, 6)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unable to generate paragraph: %v\n", err)
+			os.Exit(2)
+		}
 	}
 	fmt.Println(strings.Join(paragraphs, "\n\n"))
 }

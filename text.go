@@ -1,6 +1,9 @@
 package randtxt
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"math/rand"
 	"strings"
 	"unicode"
@@ -9,53 +12,133 @@ import (
 )
 
 type Generator struct {
-	Chain markov.Chain
+	chain     markov.Chain
+	ngramSize int
+}
+
+func NewGenerator(chain markov.Chain, ngramSize int) *Generator {
+	if ngramSize <= 1 {
+		panic("ngramSize must be greater than 1")
+	}
+
+	return &Generator{
+		chain:     chain,
+		ngramSize: ngramSize,
+	}
 }
 
 // Paragraph returns a paragraph containing between "min" and "max" sentences.
-func (g *Generator) Paragraph(min, max int) string {
-	stop := make(chan struct{})
-	defer close(stop)
+func (g *Generator) Paragraph(min, max int) (string, error) {
+	total := rand.Intn(max-min) + min
+	generated := 0
 
-	tags := genTags(stop, markov.RandomWalker(g.Chain, 0))
-
-	sentences := make([]string, rand.Intn(max-min)+min)
-	for i := range sentences {
-		sentences[i] = genSentence(tags)
+	pastRaw, err := g.chain.Get(0)
+	if err != nil {
+		return "", err
 	}
+	past := strings.Split(pastRaw.(string), " ")
 
-	return strings.Join(sentences, " ")
-}
+	text := &bytes.Buffer{}
 
-func genSentence(tags <-chan tag) string {
-	var sentence strings.Builder
+	g.writeWord(text, tag{}, parseTag(past[0]))
 
-	tag := <-tags
-	tag.Text = titleCase(tag.Text)
+	for i := 1; i < len(past); i++ {
+		tag := parseTag(past[i])
+		g.writeWord(text, parseTag(past[i-1]), tag)
+
+		if tag.Tag == "." {
+			generated++
+			if generated == total {
+				return text.String(), nil
+			}
+		}
+	}
 
 	for {
-		sentence.WriteString(tag.Text)
-
-		if tag.Text == "." {
-			break
+		next, err := g.next(past)
+		if err != nil {
+			return "", err
 		}
 
-		tag = <-tags
-		switch tag.Tag {
-		case ".", ",", "POS":
-		case "RB":
-			if tag.Text == "n't" {
-				continue
+		copy(past, past[1:g.ngramSize])
+		past[g.ngramSize-1] = next
+
+		tag := parseTag(next)
+		g.writeWord(text, parseTag(past[g.ngramSize-2]), tag)
+
+		if tag.Tag == "." {
+			generated++
+			if generated == total {
+				break
 			}
-			fallthrough
-		default:
-			sentence.WriteString(" ")
 		}
 	}
 
-	return sentence.String()
+	return text.String(), nil
 }
 
+func (g *Generator) writeWord(w io.Writer, prev, this tag) {
+	needSpace := false
+
+	switch this.Tag {
+	case ".", ",", ":", "POS":
+	case "RB":
+		if this.Text != "n't" {
+			needSpace = true
+		}
+	default:
+		needSpace = true
+	}
+
+	if !prev.IsZero() && needSpace {
+		io.WriteString(w, " ")
+	}
+
+	word := this.Text
+
+	switch prev.Tag {
+	case "", ".", ":":
+		if prev.Text != ";" {
+			word = titleCase(word)
+		}
+	}
+
+	io.WriteString(w, word)
+}
+
+func (g *Generator) next(past []string) (string, error) {
+	key := strings.Join(past, " ")
+	pastID, err := g.chain.Find(key)
+	if err != nil {
+		return "", err
+	}
+
+	links, err := g.chain.Links(pastID)
+	if err != nil {
+		return "", err
+	}
+
+	if len(links) == 0 {
+		return "", errors.New("not found")
+	}
+
+	index := rand.Float64()
+	var passed float64
+
+	for _, link := range links {
+		passed += link.Probability
+		if passed > index {
+			raw, err := g.chain.Get(link.ID)
+			if err != nil {
+				return "", err
+			}
+
+			return raw.(string), nil
+		}
+	}
+
+	return "", errors.New("failed")
+}
 func titleCase(text string) string {
 	buf := []rune(text)
 	if len(buf) == 0 {
@@ -71,26 +154,18 @@ type tag struct {
 	Tag  string
 }
 
-func genTags(cancel <-chan struct{}, walker markov.Walker) <-chan tag {
-	tags := make(chan tag)
+func (t tag) IsZero() bool {
+	return t.Text == "" && t.Tag == ""
+}
 
-	go func() {
-		for {
-			ngram, err := walker.Next()
-			if err != nil {
-				panic(err)
-			}
+func parseTag(gram string) tag {
+	split := strings.Split(gram, "/")
+	if len(split) < 2 {
+		return tag{}
+	}
 
-			grams := strings.Split(ngram.(string), " ")
-			for _, gram := range grams {
-				split := strings.Split(gram, "/")
-				tags <- tag{
-					Text: split[0],
-					Tag:  split[1],
-				}
-			}
-		}
-	}()
-
-	return tags
+	return tag{
+		Text: split[0],
+		Tag:  split[1],
+	}
 }

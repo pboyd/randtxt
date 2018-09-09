@@ -26,7 +26,7 @@ func init() {
 	flag.StringVar(&output, "chain", "", "path the the output chain file")
 	flag.BoolVar(&update, "update", false, "update the output file instead of overwriting it")
 	flag.BoolVar(&onDisk, "disk", false, "write the chain directly to disk")
-	flag.IntVar(&n, "n", 2, "ngram size")
+	flag.IntVar(&n, "n", 3, "ngram size")
 	flag.Parse()
 }
 
@@ -135,17 +135,7 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 			close(ngrams)
 		}()
 
-		current := make([]string, 0, n)
-		emit := func() {
-			if len(current) == 0 {
-				return
-			}
-
-			ngrams <- fmt.Sprintf(strings.Join(current, " "))
-			current = current[:0]
-		}
-
-		lastWasPhraseStart := false
+		ngram := make([]string, 0, n)
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -162,19 +152,8 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 			}
 
 			switch tag {
-			case ":", ".", "``", "-LRB-":
-				if lastWasPhraseStart {
-					continue
-				}
-
-				emit()
-				ngrams <- phraseStart
-				lastWasPhraseStart = true
+			case "-LRB", "``", "-RRB-", "''", "SYM":
 				continue
-			case "-RRB-", "''", "SYM":
-				continue
-			default:
-				lastWasPhraseStart = false
 			}
 
 			if text != "I" && tag != "NNP" && tag != "NNPS" {
@@ -185,11 +164,22 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 				text = strings.TrimLeft(text, "'")
 			}
 
-			current = append(current, fmt.Sprintf("%s/%s", text, tag))
+			gram := fmt.Sprintf("%s/%s", text, tag)
 
-			if len(current) == n {
-				emit()
+			if len(ngram) < n {
+				ngram = append(ngram, gram)
+
+				if len(ngram) < n {
+					continue
+				}
+			} else {
+				ngrams <- gram
+
+				copy(ngram[0:], ngram[1:])
+				ngram[n-1] = gram
 			}
+
+			ngrams <- strings.Join(ngram, " ")
 		}
 	}()
 
