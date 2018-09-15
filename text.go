@@ -32,39 +32,34 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	total := rand.Intn(max-min) + min
 	generated := 0
 
-	pastRaw, err := g.chain.Get(0)
-	if err != nil {
-		return "", err
-	}
-	past := strings.Split(pastRaw.(string), " ")
+	done := make(chan struct{})
+	defer close(done)
 
+	gen := g.generate(done)
 	text := &bytes.Buffer{}
 
-	g.writeWord(text, tag{}, parseTag(past[0]))
-
-	for i := 1; i < len(past); i++ {
-		tag := parseTag(past[i])
-		g.writeWord(text, parseTag(past[i-1]), tag)
-
-		if tag.Tag == "." {
-			generated++
-			if generated == total {
-				return text.String(), nil
-			}
+	for te := range gen {
+		if te.Tag.Tag == "." {
+			break
 		}
 	}
 
-	for {
-		next, err := g.next(past)
-		if err != nil {
-			return "", err
+	first := <-gen
+	if first.Err != nil {
+		return "", first.Err
+	}
+	g.writeWord(text, tag{}, first.Tag)
+
+	last := first.Tag
+
+	for te := range gen {
+		if te.Err != nil {
+			return "", te.Err
 		}
 
-		copy(past, past[1:g.ngramSize])
-		past[g.ngramSize-1] = next
+		tag := te.Tag
 
-		tag := parseTag(next)
-		g.writeWord(text, parseTag(past[g.ngramSize-2]), tag)
+		g.writeWord(text, last, tag)
 
 		if tag.Tag == "." {
 			generated++
@@ -72,9 +67,76 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 				break
 			}
 		}
+
+		last = tag
 	}
 
 	return text.String(), nil
+}
+
+func (g *Generator) generate(done chan struct{}) <-chan tagError {
+	out := make(chan tagError)
+
+	go func() {
+		defer close(out)
+
+		past, err := g.seed()
+		if err != nil {
+			select {
+			case out <- tagError{Err: err}:
+			case <-done:
+			}
+
+			return
+		}
+
+		for _, rawTag := range past {
+			select {
+			case out <- tagError{Tag: parseTag(rawTag)}:
+			case <-done:
+				return
+			}
+		}
+
+		for {
+			next, err := g.next(past)
+			if err != nil {
+				select {
+				case out <- tagError{Err: err}:
+				case <-done:
+				}
+
+				return
+			}
+
+			// Shift the past elements to the left to make room for
+			// the new word.
+			copy(past, past[1:g.ngramSize])
+			past[g.ngramSize-1] = next
+
+			select {
+			case out <- tagError{Tag: parseTag(next)}:
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	return out
+}
+
+func (g *Generator) seed() ([]string, error) {
+	for {
+		raw, err := markov.Random(g.chain)
+		if err != nil {
+			return nil, err
+		}
+
+		seed := strings.Split(raw.(string), " ")
+		if len(seed) > 1 {
+			return seed, nil
+		}
+	}
 }
 
 func (g *Generator) writeWord(w io.Writer, prev, this tag) {
@@ -168,4 +230,9 @@ func parseTag(gram string) tag {
 		Text: split[0],
 		Tag:  split[1],
 	}
+}
+
+type tagError struct {
+	Tag tag
+	Err error
 }
