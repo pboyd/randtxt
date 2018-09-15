@@ -129,6 +129,8 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 
 	ngrams := make(chan interface{})
 
+	endOfSentence := true
+
 	go func() {
 		defer func() {
 			fh.Close()
@@ -152,17 +154,20 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 			}
 
 			switch tag {
-			case "-LRB", "``", "-RRB-", "''", "SYM":
+			case "-LRB-", "``", "-RRB-", "''", "SYM":
 				continue
 			}
 
-			if text != "I" && tag != "NNP" && tag != "NNPS" {
+			// Lower case words that begin sentences, unless it's a proper noun.
+			if endOfSentence && (text != "I" && tag != "NNP" && tag != "NNPS") {
 				text = strings.ToLower(text)
 			}
 
 			if tag != "POS" && tag != "VBZ" {
 				text = strings.TrimLeft(text, "'")
 			}
+
+			endOfSentence = tag == "."
 
 			gram := fmt.Sprintf("%s/%s", text, tag)
 

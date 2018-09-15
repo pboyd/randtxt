@@ -148,6 +148,10 @@ func (g *Generator) writeWord(w io.Writer, prev, this tag) {
 		if this.Text != "n't" {
 			needSpace = true
 		}
+	case "VBZ":
+		if !strings.HasPrefix(this.Text, "'") {
+			needSpace = true
+		}
 	default:
 		needSpace = true
 	}
