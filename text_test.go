@@ -17,7 +17,11 @@ func TestParagraph(t *testing.T) {
 		max = 5
 	)
 
-	g := NewGenerator(chain, 3)
+	g, err := NewGenerator(chain)
+	if err != nil {
+		t.Fatalf("invalid chain: %v", err)
+	}
+
 	text, err := g.Paragraph(3, 5)
 	if err != nil {
 		t.Fatalf("got error %v, want nil", err)
@@ -66,4 +70,37 @@ func testChain(t *testing.T, path string) (chain markov.Chain, close func() erro
 	}
 
 	return chain, fh.Close
+}
+
+func TestValidChain(t *testing.T) {
+	chain, close := testChain(t, "testfiles/ion-3.mkv")
+	defer close()
+
+	_, err := NewGenerator(chain)
+	if err != nil {
+		t.Errorf("got error for valid chain: %v", err)
+	}
+}
+
+func TestInvalidChains(t *testing.T) {
+	cases := map[string]markov.Chain{
+		"non-string":   invalidChain(1),
+		"ngram size 1": invalidChain("John/NN"),
+		"untagged":     invalidChain("Paul George Ringo"),
+		"unknown tag":  invalidChain("Paul;NN George;NN Ringo;NN"),
+		"just tags":    invalidChain("/NN /VBZ"),
+	}
+
+	for desc, chain := range cases {
+		_, err := NewGenerator(chain)
+		if err == nil {
+			t.Errorf("%s: no error", desc)
+		}
+	}
+}
+
+func invalidChain(root interface{}) markov.Chain {
+	chain := markov.NewMemoryChain(1)
+	chain.Add(root)
+	return chain
 }

@@ -3,6 +3,7 @@ package randtxt
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"strings"
@@ -11,20 +12,49 @@ import (
 	"github.com/pboyd/markov"
 )
 
+// Generator generates random text from a `markov.Chain'.
 type Generator struct {
 	chain     markov.Chain
 	ngramSize int
 }
 
-func NewGenerator(chain markov.Chain, ngramSize int) *Generator {
-	if ngramSize <= 1 {
-		panic("ngramSize must be greater than 1")
+// NewGenerator returns a new generator.
+func NewGenerator(chain markov.Chain) (*Generator, error) {
+	ngramSize, err := inspectChain(chain)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Generator{
 		chain:     chain,
 		ngramSize: ngramSize,
+	}, nil
+}
+
+func inspectChain(chain markov.Chain) (int, error) {
+	root, err := chain.Get(0)
+	if err != nil {
+		return 0, err
 	}
+
+	rootString, ok := root.(string)
+	if !ok {
+		return 0, fmt.Errorf("chain has type %T, want string", root)
+	}
+
+	split := strings.Split(rootString, " ")
+	if len(split) < 2 {
+		return 0, fmt.Errorf("chain has ngram size of %d, want at least 2", len(split))
+	}
+
+	for _, gram := range split {
+		tag := parseTag(gram)
+		if tag.Tag == "" || tag.Text == "" {
+			return 0, fmt.Errorf("unrecognized tag format %q", gram)
+		}
+	}
+
+	return len(split), nil
 }
 
 // Paragraph returns a paragraph containing between "min" and "max" sentences.
