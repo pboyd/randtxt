@@ -49,7 +49,7 @@ func inspectChain(chain markov.Chain) (int, error) {
 
 	for _, gram := range split {
 		tag := parseTag(gram)
-		if tag.Tag == "" || tag.Text == "" {
+		if tag.POS == "" || tag.Text == "" {
 			return 0, fmt.Errorf("unrecognized tag format %q", gram)
 		}
 	}
@@ -69,7 +69,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	text := &bytes.Buffer{}
 
 	for te := range gen {
-		if te.Tag.Tag == "." {
+		if te.Tag.POS == "." {
 			break
 		}
 	}
@@ -78,7 +78,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	if first.Err != nil {
 		return "", first.Err
 	}
-	g.writeWord(text, tag{}, first.Tag)
+	g.writeWord(text, Tag{}, first.Tag)
 
 	last := first.Tag
 
@@ -91,7 +91,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 
 		g.writeWord(text, last, tag)
 
-		if tag.Tag == "." {
+		if tag.POS == "." {
 			generated++
 			if generated == total {
 				break
@@ -104,8 +104,8 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	return text.String(), nil
 }
 
-func (g *Generator) generate(done chan struct{}) <-chan tagError {
-	out := make(chan tagError)
+func (g *Generator) generate(done chan struct{}) <-chan tagOrError {
+	out := make(chan tagOrError)
 
 	go func() {
 		defer close(out)
@@ -113,7 +113,7 @@ func (g *Generator) generate(done chan struct{}) <-chan tagError {
 		past, err := g.seed()
 		if err != nil {
 			select {
-			case out <- tagError{Err: err}:
+			case out <- tagOrError{Err: err}:
 			case <-done:
 			}
 
@@ -122,7 +122,7 @@ func (g *Generator) generate(done chan struct{}) <-chan tagError {
 
 		for _, rawTag := range past {
 			select {
-			case out <- tagError{Tag: parseTag(rawTag)}:
+			case out <- tagOrError{Tag: parseTag(rawTag)}:
 			case <-done:
 				return
 			}
@@ -132,7 +132,7 @@ func (g *Generator) generate(done chan struct{}) <-chan tagError {
 			next, err := g.next(past)
 			if err != nil {
 				select {
-				case out <- tagError{Err: err}:
+				case out <- tagOrError{Err: err}:
 				case <-done:
 				}
 
@@ -145,7 +145,7 @@ func (g *Generator) generate(done chan struct{}) <-chan tagError {
 			past[g.ngramSize-1] = next
 
 			select {
-			case out <- tagError{Tag: parseTag(next)}:
+			case out <- tagOrError{Tag: parseTag(next)}:
 			case <-done:
 				return
 			}
@@ -169,10 +169,10 @@ func (g *Generator) seed() ([]string, error) {
 	}
 }
 
-func (g *Generator) writeWord(w io.Writer, prev, this tag) {
+func (g *Generator) writeWord(w io.Writer, prev, this Tag) {
 	needSpace := false
 
-	switch this.Tag {
+	switch this.POS {
 	case ".", ",", ":", "POS":
 	case "RB":
 		if this.Text != "n't" {
@@ -192,7 +192,7 @@ func (g *Generator) writeWord(w io.Writer, prev, this tag) {
 
 	word := this.Text
 
-	switch prev.Tag {
+	switch prev.POS {
 	case "", ".", ":":
 		if prev.Text != ";" {
 			word = titleCase(word)
@@ -235,6 +235,7 @@ func (g *Generator) next(past []string) (string, error) {
 
 	return "", errors.New("failed")
 }
+
 func titleCase(text string) string {
 	buf := []rune(text)
 	if len(buf) == 0 {
@@ -245,28 +246,7 @@ func titleCase(text string) string {
 	return string(buf)
 }
 
-type tag struct {
-	Text string
-	Tag  string
-}
-
-func (t tag) IsZero() bool {
-	return t.Text == "" && t.Tag == ""
-}
-
-func parseTag(gram string) tag {
-	split := strings.Split(gram, "/")
-	if len(split) < 2 {
-		return tag{}
-	}
-
-	return tag{
-		Text: split[0],
-		Tag:  split[1],
-	}
-}
-
-type tagError struct {
-	Tag tag
+type tagOrError struct {
+	Tag Tag
 	Err error
 }
