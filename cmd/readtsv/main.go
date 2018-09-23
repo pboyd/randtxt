@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pboyd/markov"
+	"github.com/pboyd/randtxt"
 )
 
 var (
@@ -16,10 +17,6 @@ var (
 	update bool
 	onDisk bool
 	n      int
-)
-
-const (
-	phraseStart = "./."
 )
 
 func init() {
@@ -42,11 +39,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	ngrams := make([]<-chan interface{}, len(sources))
+	tags := make([]<-chan randtxt.Tag, len(sources))
 
 	for i, source := range sources {
 		var err error
-		ngrams[i], err = readTSV(source, n)
+		tags[i], err = readTSV(source)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "file error (%s): %v\n", source, err)
 			os.Exit(1)
@@ -60,14 +57,16 @@ func main() {
 	}
 
 	if onDisk {
-		err := markov.Feed(diskChain, ngrams...)
+		builder := randtxt.NewBuilder(diskChain, n)
+		err := builder.Feed(tags...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error building chain: %v\n", err)
 			os.Exit(2)
 		}
 	} else {
 		memoryChain := &markov.MemoryChain{}
-		err := markov.Feed(memoryChain, ngrams...)
+		builder := randtxt.NewBuilder(memoryChain, n)
+		err := builder.Feed(tags...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error building chain: %v\n", err)
 			os.Exit(2)
@@ -119,7 +118,7 @@ func fileExists(path string) (bool, error) {
 	return false, err
 }
 
-func readTSV(path string, n int) (<-chan interface{}, error) {
+func readTSV(path string) (<-chan randtxt.Tag, error) {
 	fh, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -127,17 +126,13 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 
 	reader := bufio.NewReader(fh)
 
-	ngrams := make(chan interface{})
-
-	endOfSentence := true
+	tags := make(chan randtxt.Tag)
 
 	go func() {
 		defer func() {
 			fh.Close()
-			close(ngrams)
+			close(tags)
 		}()
-
-		ngram := make([]string, 0, n)
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -148,58 +143,28 @@ func readTSV(path string, n int) (<-chan interface{}, error) {
 				break
 			}
 
-			text, tag := parseLine(line)
-			if text == "" {
+			tag := parseLine(line)
+			if tag.Text == "" || tag.POS == "" {
 				continue
 			}
 
-			switch tag {
-			case "-LRB-", "``", "-RRB-", "''", "SYM":
-				continue
-			}
-
-			// Lower case words that begin sentences, unless it's a proper noun.
-			if endOfSentence && (text != "I" && tag != "NNP" && tag != "NNPS") {
-				text = strings.ToLower(text)
-			}
-
-			if tag != "POS" && tag != "VBZ" {
-				text = strings.TrimLeft(text, "'")
-			}
-
-			endOfSentence = tag == "."
-
-			gram := fmt.Sprintf("%s/%s", text, tag)
-
-			if len(ngram) < n {
-				ngram = append(ngram, gram)
-
-				if len(ngram) < n {
-					continue
-				}
-			} else {
-				ngrams <- gram
-
-				copy(ngram[0:], ngram[1:])
-				ngram[n-1] = gram
-			}
-
-			ngrams <- strings.Join(ngram, " ")
+			tags <- tag
 		}
 	}()
 
-	return ngrams, nil
+	return tags, nil
 }
 
-func parseLine(line string) (word string, tag string) {
+func parseLine(line string) randtxt.Tag {
 	line = strings.TrimSpace(line)
 
 	i := strings.IndexByte(line, '\t')
 	if i < 0 {
-		return
+		return randtxt.Tag{}
 	}
-	word = line[:i]
-	tag = line[i+1:]
 
-	return
+	return randtxt.Tag{
+		Text: line[:i],
+		POS:  line[i+1:],
+	}
 }
