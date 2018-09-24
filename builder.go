@@ -6,21 +6,21 @@ import (
 	"github.com/pboyd/markov"
 )
 
-type Builder struct {
+type ModelBuilder struct {
 	chain     markov.WriteChain
 	ngramSize int
 	TagSet    TagSet
 }
 
-func NewBuilder(chain markov.WriteChain, ngramSize int) *Builder {
-	return &Builder{
+func NewModelBuilder(chain markov.WriteChain, ngramSize int) *ModelBuilder {
+	return &ModelBuilder{
 		chain:     chain,
 		ngramSize: ngramSize,
 		TagSet:    PennTreebankTagSet,
 	}
 }
 
-func (b *Builder) Feed(sources ...<-chan Tag) error {
+func (b *ModelBuilder) Feed(sources ...<-chan Tag) error {
 	ngrams := make([]<-chan interface{}, len(sources))
 	for i, source := range sources {
 		ngrams[i] = b.joinTags(source)
@@ -29,7 +29,7 @@ func (b *Builder) Feed(sources ...<-chan Tag) error {
 	return markov.Feed(b.chain, ngrams...)
 }
 
-func (b *Builder) joinTags(tags <-chan Tag) <-chan interface{} {
+func (b *ModelBuilder) joinTags(tags <-chan Tag) <-chan interface{} {
 	ngrams := make(chan interface{})
 
 	go func() {

@@ -57,7 +57,7 @@ func main() {
 	}
 
 	if onDisk {
-		builder := randtxt.NewBuilder(diskChain, n)
+		builder := randtxt.NewModelBuilder(diskChain, n)
 		err := builder.Feed(tags...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error building chain: %v\n", err)
@@ -65,7 +65,7 @@ func main() {
 		}
 	} else {
 		memoryChain := &markov.MemoryChain{}
-		builder := randtxt.NewBuilder(memoryChain, n)
+		builder := randtxt.NewModelBuilder(memoryChain, n)
 		err := builder.Feed(tags...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error building chain: %v\n", err)

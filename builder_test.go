@@ -8,7 +8,7 @@ import (
 
 func TestBuilder(t *testing.T) {
 	chain := markov.NewMemoryChain(100)
-	b := NewBuilder(chain, 3)
+	b := NewModelBuilder(chain, 3)
 
 	err := b.Feed(tagFeed(100))
 	if err != nil {
