@@ -6,12 +6,21 @@ import (
 	"github.com/pboyd/markov"
 )
 
+// ModelBuilder builds a model that Generator can use.
 type ModelBuilder struct {
 	chain     markov.WriteChain
 	ngramSize int
 	TagSet    TagSet
 }
 
+// NewModelBuilder creates a ModelBuilder instance.
+//
+// The model will be written to "chain".
+//
+// ngramSize is the number of words to include in each ngram. Must be greater
+// than 1.
+//
+// See cmd/readtsv for an example.
 func NewModelBuilder(chain markov.WriteChain, ngramSize int) *ModelBuilder {
 	return &ModelBuilder{
 		chain:     chain,
@@ -20,6 +29,8 @@ func NewModelBuilder(chain markov.WriteChain, ngramSize int) *ModelBuilder {
 	}
 }
 
+// Feed reads tags from one or more channels and writes them to the output
+// chain.
 func (b *ModelBuilder) Feed(sources ...<-chan Tag) error {
 	ngrams := make([]<-chan interface{}, len(sources))
 	for i, source := range sources {

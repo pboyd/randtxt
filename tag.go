@@ -5,15 +5,20 @@ import (
 	"strings"
 )
 
+// Tag represents a single tagged word.
 type Tag struct {
 	Text string
-	POS  string
+
+	// POS is the part of speech tag for the text.
+	POS string
 }
 
+// IsZero tests if the tag is the empty zero value.
 func (t Tag) IsZero() bool {
 	return t.Text == "" && t.POS == ""
 }
 
+// String returns the tag in "Text/POS" form.
 func (t Tag) String() string {
 	if t.IsZero() {
 		return ""

@@ -6,6 +6,7 @@ import (
 	"unicode"
 )
 
+// TagSet contains code specific to a language and tagset.
 type TagSet interface {
 	// Join returns the text from "tag" prepended with the separator that
 	// should be between "prev" and "tag".
@@ -18,6 +19,13 @@ type TagSet interface {
 	Normalize(tag, prev Tag) Tag
 }
 
+// PennTreebankTagSet is a TagSet for the English Penn Treebank tagset, as used
+// by the Stanford POS tagger.
+//
+// More details:
+//
+// https://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+// https://nlp.stanford.edu/software/tagger.shtml
 var PennTreebankTagSet = pennTreebankTagSet{}
 
 type pennTreebankTagSet struct{}

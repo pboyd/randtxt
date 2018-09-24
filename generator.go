@@ -11,14 +11,18 @@ import (
 	"github.com/pboyd/markov"
 )
 
-// Generator generates random text from a `markov.Chain'.
+// Generator generates random text from a model built by ModelBuilder.
 type Generator struct {
 	chain     markov.Chain
 	ngramSize int
-	TagSet    TagSet
+
+	// TagSet is the language and tagset specific rules. This should match
+	// the TagSet used when the model was built.
+	TagSet TagSet
 }
 
-// NewGenerator returns a new generator.
+// NewGenerator returns a new generator. Returns an error if the chain has an
+// unrecognized format.
 func NewGenerator(chain markov.Chain) (*Generator, error) {
 	ngramSize, err := inspectChain(chain)
 	if err != nil {
