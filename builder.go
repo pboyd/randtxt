@@ -1,7 +1,6 @@
 package randtxt
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pboyd/markov"
@@ -10,12 +9,14 @@ import (
 type Builder struct {
 	chain     markov.WriteChain
 	ngramSize int
+	TagSet    TagSet
 }
 
 func NewBuilder(chain markov.WriteChain, ngramSize int) *Builder {
 	return &Builder{
 		chain:     chain,
 		ngramSize: ngramSize,
+		TagSet:    PennTreebankTagSet,
 	}
 }
 
@@ -31,31 +32,19 @@ func (b *Builder) Feed(sources ...<-chan Tag) error {
 func (b *Builder) joinTags(tags <-chan Tag) <-chan interface{} {
 	ngrams := make(chan interface{})
 
-	endOfSentence := true
-
 	go func() {
 		defer close(ngrams)
 
+		var prev Tag
 		ngram := make([]string, 0, b.ngramSize)
 
 		for tag := range tags {
-			switch tag.POS {
-			case "-LRB-", "``", "-RRB-", "''", "SYM":
+			tag = b.TagSet.Normalize(tag, prev)
+			if tag.Text == "" {
 				continue
 			}
 
-			// Lower case words that begin sentences, unless it's a proper noun.
-			if endOfSentence && (tag.Text != "I" && tag.POS != "NNP" && tag.POS != "NNPS") {
-				tag.Text = strings.ToLower(tag.Text)
-			}
-
-			if tag.POS != "POS" && tag.POS != "VBZ" {
-				tag.Text = strings.TrimLeft(tag.Text, "'")
-			}
-
-			endOfSentence = tag.POS == "."
-
-			gram := fmt.Sprintf("%s/%s", tag.Text, tag.POS)
+			gram := tag.String()
 
 			if len(ngram) < b.ngramSize {
 				ngram = append(ngram, gram)
@@ -71,6 +60,8 @@ func (b *Builder) joinTags(tags <-chan Tag) <-chan interface{} {
 			}
 
 			ngrams <- strings.Join(ngram, " ")
+
+			prev = tag
 		}
 	}()
 

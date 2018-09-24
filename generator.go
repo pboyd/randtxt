@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand"
 	"strings"
-	"unicode"
 
 	"github.com/pboyd/markov"
 )
@@ -16,6 +15,7 @@ import (
 type Generator struct {
 	chain     markov.Chain
 	ngramSize int
+	TagSet    TagSet
 }
 
 // NewGenerator returns a new generator.
@@ -28,6 +28,7 @@ func NewGenerator(chain markov.Chain) (*Generator, error) {
 	return &Generator{
 		chain:     chain,
 		ngramSize: ngramSize,
+		TagSet:    PennTreebankTagSet,
 	}, nil
 }
 
@@ -78,7 +79,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	if first.Err != nil {
 		return "", first.Err
 	}
-	g.writeWord(text, Tag{}, first.Tag)
+	io.WriteString(text, g.TagSet.Join(first.Tag, Tag{}))
 
 	last := first.Tag
 
@@ -89,7 +90,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 
 		tag := te.Tag
 
-		g.writeWord(text, last, tag)
+		io.WriteString(text, g.TagSet.Join(tag, last))
 
 		if tag.POS == "." {
 			generated++
@@ -169,39 +170,6 @@ func (g *Generator) seed() ([]string, error) {
 	}
 }
 
-func (g *Generator) writeWord(w io.Writer, prev, this Tag) {
-	needSpace := false
-
-	switch this.POS {
-	case ".", ",", ":", "POS":
-	case "RB":
-		if this.Text != "n't" {
-			needSpace = true
-		}
-	case "VBZ":
-		if !strings.HasPrefix(this.Text, "'") {
-			needSpace = true
-		}
-	default:
-		needSpace = true
-	}
-
-	if !prev.IsZero() && needSpace {
-		io.WriteString(w, " ")
-	}
-
-	word := this.Text
-
-	switch prev.POS {
-	case "", ".", ":":
-		if prev.Text != ";" {
-			word = titleCase(word)
-		}
-	}
-
-	io.WriteString(w, word)
-}
-
 func (g *Generator) next(past []string) (string, error) {
 	key := strings.Join(past, " ")
 	pastID, err := g.chain.Find(key)
@@ -234,16 +202,6 @@ func (g *Generator) next(past []string) (string, error) {
 	}
 
 	return "", errors.New("failed")
-}
-
-func titleCase(text string) string {
-	buf := []rune(text)
-	if len(buf) == 0 {
-		return ""
-	}
-
-	buf[0] = unicode.ToTitle(buf[0])
-	return string(buf)
 }
 
 type tagOrError struct {

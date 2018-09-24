@@ -1,6 +1,9 @@
 package randtxt
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type Tag struct {
 	Text string
@@ -9,6 +12,13 @@ type Tag struct {
 
 func (t Tag) IsZero() bool {
 	return t.Text == "" && t.POS == ""
+}
+
+func (t Tag) String() string {
+	if t.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s", t.Text, t.POS)
 }
 
 func parseTag(gram string) Tag {
