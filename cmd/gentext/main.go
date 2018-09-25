@@ -19,7 +19,7 @@ var (
 
 func init() {
 	flag.StringVar(&source, "chain", "", "path to the chain file")
-	flag.IntVar(&count, "count", 10, "number of paragraphs to generate")
+	flag.IntVar(&count, "count", 1, "number of paragraphs to generate")
 	flag.IntVar(&seed, "seed", 0, "random seed")
 	flag.Parse()
 }
@@ -30,6 +30,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "-seed=%d\n", seed)
 	}
 	rand.Seed(int64(seed))
+
+	if source == "" {
+		fmt.Fprintf(os.Stderr, "error: chain is required\n")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
 
 	fh, err := os.Open(source)
 	if err != nil {
