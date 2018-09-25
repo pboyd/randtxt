@@ -9,7 +9,7 @@ import (
 )
 
 func TestParagraph(t *testing.T) {
-	chain, close := testChain(t, "testfiles/ion-3.mkv")
+	chain, close := testChain(t, "testfiles/ion/trigram.mkv")
 	defer close()
 
 	const (
@@ -73,7 +73,7 @@ func testChain(t *testing.T, path string) (chain markov.Chain, close func() erro
 }
 
 func TestValidChain(t *testing.T) {
-	chain, close := testChain(t, "testfiles/ion-3.mkv")
+	chain, close := testChain(t, "testfiles/ion/trigram.mkv")
 	defer close()
 
 	_, err := NewGenerator(chain)
