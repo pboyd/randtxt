@@ -26,6 +26,8 @@ text, then run `cmd/readtsv`. For example:
 go run github.com/pboyd/randtxt/cmd/readtsv -chain output.mkv $GOPATH/src/github.com/pboyd/randtxt/testfiles/ion/tagged.tsv
 ```
 
+I wrote about the design [here](https://pboyd.io/posts/random-text/).
+
 # License
 
 This package is released under the terms of the Apache 2.0 license. See LICENSE.TXT.
