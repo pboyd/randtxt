@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
-	"strings"
 
 	"github.com/pboyd/markov"
 	"github.com/pboyd/randtxt"
@@ -56,14 +56,17 @@ func main() {
 		os.Exit(2)
 	}
 
-	paragraphs := make([]string, count)
-	for i := range paragraphs {
+	for i := 0; i < count; i++ {
 		var err error
-		paragraphs[i], err = gen.Paragraph(3, 6)
+		err = gen.WriteParagraph(os.Stdout, 3, 6)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to generate paragraph: %v\n", err)
 			os.Exit(2)
 		}
+
+		if i < count-1 {
+			io.WriteString(os.Stdout, "\n\n")
+		}
 	}
-	fmt.Println(strings.Join(paragraphs, "\n\n"))
+	io.WriteString(os.Stdout, "\n")
 }

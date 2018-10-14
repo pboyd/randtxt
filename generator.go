@@ -64,6 +64,18 @@ func inspectChain(chain markov.Chain) (int, error) {
 
 // Paragraph returns a paragraph containing between "min" and "max" sentences.
 func (g *Generator) Paragraph(min, max int) (string, error) {
+	text := &bytes.Buffer{}
+	err := g.WriteParagraph(text, min, max)
+	if err != nil {
+		return "", err
+	}
+
+	return text.String(), nil
+}
+
+// WriteParagraph writes a paragraph of random text to "out". The paragraph
+// will contain between "min" and "max" sentences.
+func (g *Generator) WriteParagraph(out io.Writer, min, max int) error {
 	total := rand.Intn(max-min) + min
 	generated := 0
 
@@ -71,7 +83,6 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 	defer close(done)
 
 	gen := g.generate(done)
-	text := &bytes.Buffer{}
 
 	for te := range gen {
 		if te.Tag.POS == "." {
@@ -81,20 +92,20 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 
 	first := <-gen
 	if first.Err != nil {
-		return "", first.Err
+		return first.Err
 	}
-	io.WriteString(text, g.TagSet.Join(first.Tag, Tag{}))
+	io.WriteString(out, g.TagSet.Join(first.Tag, Tag{}))
 
 	last := first.Tag
 
 	for te := range gen {
 		if te.Err != nil {
-			return "", te.Err
+			return te.Err
 		}
 
 		tag := te.Tag
 
-		io.WriteString(text, g.TagSet.Join(tag, last))
+		io.WriteString(out, g.TagSet.Join(tag, last))
 
 		if tag.POS == "." {
 			generated++
@@ -106,7 +117,7 @@ func (g *Generator) Paragraph(min, max int) (string, error) {
 		last = tag
 	}
 
-	return text.String(), nil
+	return nil
 }
 
 func (g *Generator) generate(done chan struct{}) <-chan tagOrError {
