@@ -2,7 +2,6 @@ package randtxt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -13,8 +12,7 @@ import (
 
 // Generator generates random text from a model built by ModelBuilder.
 type Generator struct {
-	chain     markov.Chain
-	ngramSize int
+	chain markov.Chain
 
 	// TagSet is the language and tagset specific rules. This should match
 	// the TagSet used when the model was built.
@@ -24,15 +22,14 @@ type Generator struct {
 // NewGenerator returns a new generator. Returns an error if the chain has an
 // unrecognized format.
 func NewGenerator(chain markov.Chain) (*Generator, error) {
-	ngramSize, err := inspectChain(chain)
+	_, err := inspectChain(chain)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Generator{
-		chain:     chain,
-		ngramSize: ngramSize,
-		TagSet:    PennTreebankTagSet,
+		chain:  chain,
+		TagSet: PennTreebankTagSet,
 	}, nil
 }
 
@@ -123,100 +120,55 @@ func (g *Generator) WriteParagraph(out io.Writer, min, max int) error {
 func (g *Generator) generate(done chan struct{}) <-chan tagOrError {
 	out := make(chan tagOrError)
 
+	send := func(tag Tag, err error) bool {
+		te := tagOrError{
+			Tag: tag,
+			Err: err,
+		}
+
+		select {
+		case out <- te:
+			return false
+		case <-done:
+			return true
+		}
+	}
+
 	go func() {
 		defer close(out)
 
-		past, err := g.seed()
+		past, err := randomSeed(g.chain)
 		if err != nil {
-			select {
-			case out <- tagOrError{Err: err}:
-			case <-done:
-			}
-
+			send(Tag{}, err)
 			return
 		}
 
-		for _, rawTag := range past {
-			select {
-			case out <- tagOrError{Tag: parseTag(rawTag)}:
-			case <-done:
+		for _, rawTag := range strings.Split(past, " ") {
+			if send(parseTag(rawTag), nil) {
 				return
 			}
 		}
 
-		for {
-			next, err := g.next(past)
-			if err != nil {
-				select {
-				case out <- tagOrError{Err: err}:
-				case <-done:
-				}
+		model, err := NewModel(g.chain, past)
+		if err != nil {
+			send(Tag{}, err)
+			return
+		}
 
+		for {
+			err := model.Step()
+			if err != nil {
+				send(Tag{}, err)
 				return
 			}
 
-			// Shift the past elements to the left to make room for
-			// the new word.
-			copy(past, past[1:g.ngramSize])
-			past[g.ngramSize-1] = next
-
-			select {
-			case out <- tagOrError{Tag: parseTag(next)}:
-			case <-done:
+			if send(model.Current(), nil) {
 				return
 			}
 		}
 	}()
 
 	return out
-}
-
-func (g *Generator) seed() ([]string, error) {
-	for {
-		raw, err := markov.Random(g.chain)
-		if err != nil {
-			return nil, err
-		}
-
-		seed := strings.Split(raw.(string), " ")
-		if len(seed) > 1 {
-			return seed, nil
-		}
-	}
-}
-
-func (g *Generator) next(past []string) (string, error) {
-	key := strings.Join(past, " ")
-	pastID, err := g.chain.Find(key)
-	if err != nil {
-		return "", err
-	}
-
-	links, err := g.chain.Links(pastID)
-	if err != nil {
-		return "", err
-	}
-
-	if len(links) == 0 {
-		return "", errors.New("not found")
-	}
-
-	index := rand.Float64()
-	var passed float64
-
-	for _, link := range links {
-		passed += link.Probability
-		if passed > index {
-			raw, err := g.chain.Get(link.ID)
-			if err != nil {
-				return "", err
-			}
-
-			return raw.(string), nil
-		}
-	}
-
-	return "", errors.New("failed")
 }
 
 type tagOrError struct {
