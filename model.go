@@ -73,10 +73,6 @@ func (m *Model) NextTags() ([]TagProbability, error) {
 		return nil, err
 	}
 
-	if len(links) == 0 {
-		return nil, errors.New("not found")
-	}
-
 	tp := make([]TagProbability, len(links))
 	for i, link := range links {
 		raw, err := m.chain.Get(link.ID)
@@ -116,10 +112,6 @@ func (m *Model) pickNext() (string, error) {
 		return "", err
 	}
 
-	if len(links) == 0 {
-		return "", errors.New("not found")
-	}
-
 	index := rand.Float64()
 	var passed float64
 
@@ -144,7 +136,33 @@ func (m *Model) nextLinks() ([]markov.Link, error) {
 		return nil, err
 	}
 
-	return m.chain.Links(id)
+	links, err := m.chain.Links(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(links) == 0 {
+		// If the chain ends in a unique phrase the chain will end.
+		// Restart it at a random point. This isn't ideal, since it may
+		// be mid-sentence.
+		err = m.reseed()
+		if err != nil {
+			return nil, err
+		}
+		return m.nextLinks()
+	}
+
+	return links, nil
+}
+
+func (m *Model) reseed() error {
+	seed, err := randomSeed(m.chain)
+	if err != nil {
+		return err
+	}
+
+	m.past = strings.Split(seed, " ")
+	return nil
 }
 
 // TagProbability contains a Tag and the probability that it will be used next.
