@@ -18,7 +18,7 @@ type ModelBuilder struct {
 // The model will be written to "chain".
 //
 // ngramSize is the number of words to include in each ngram. Must be greater
-// than 1.
+// than 0.
 //
 // See cmd/readtsv for an example.
 func NewModelBuilder(chain markov.WriteChain, ngramSize int) *ModelBuilder {
@@ -54,8 +54,14 @@ func (b *ModelBuilder) joinTags(tags <-chan Tag) <-chan interface{} {
 			if tag.Text == "" {
 				continue
 			}
+			prev = tag
 
 			gram := tag.String()
+
+			if b.ngramSize == 1 {
+				ngrams <- gram
+				continue
+			}
 
 			if len(ngram) < b.ngramSize {
 				ngram = append(ngram, gram)
@@ -71,8 +77,6 @@ func (b *ModelBuilder) joinTags(tags <-chan Tag) <-chan interface{} {
 			}
 
 			ngrams <- strings.Join(ngram, " ")
-
-			prev = tag
 		}
 	}()
 

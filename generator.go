@@ -45,10 +45,6 @@ func inspectChain(chain markov.Chain) (int, error) {
 	}
 
 	split := strings.Split(rootString, " ")
-	if len(split) < 2 {
-		return 0, fmt.Errorf("chain has ngram size of %d, want at least 2", len(split))
-	}
-
 	for _, gram := range split {
 		tag := parseTag(gram)
 		if tag.POS == "" || tag.Text == "" {

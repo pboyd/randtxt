@@ -36,10 +36,6 @@ func NewModel(chain markov.Chain, seed string) (*Model, error) {
 	}
 
 	past := strings.Split(seed, " ")
-	if len(seed) == 1 {
-		return nil, errors.New("invalid chain")
-	}
-
 	return &Model{
 		chain: chain,
 		past:  past,
@@ -47,6 +43,11 @@ func NewModel(chain markov.Chain, seed string) (*Model, error) {
 }
 
 func randomSeed(chain markov.Chain) (string, error) {
+	size, err := inspectChain(chain)
+	if err != nil {
+		return "", nil
+	}
+
 	for {
 		raw, err := markov.Random(chain)
 		if err != nil {
@@ -54,7 +55,7 @@ func randomSeed(chain markov.Chain) (string, error) {
 		}
 
 		seed := strings.Split(raw.(string), " ")
-		if len(seed) > 1 {
+		if len(seed) == size {
 			return raw.(string), nil
 		}
 	}

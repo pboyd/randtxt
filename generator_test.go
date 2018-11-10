@@ -84,11 +84,10 @@ func TestValidChain(t *testing.T) {
 
 func TestInvalidChains(t *testing.T) {
 	cases := map[string]markov.Chain{
-		"non-string":   invalidChain(1),
-		"ngram size 1": invalidChain("John/NN"),
-		"untagged":     invalidChain("Paul George Ringo"),
-		"unknown tag":  invalidChain("Paul;NN George;NN Ringo;NN"),
-		"just tags":    invalidChain("/NN /VBZ"),
+		"non-string":  invalidChain(1),
+		"untagged":    invalidChain("Paul George Ringo"),
+		"unknown tag": invalidChain("Paul;NN George;NN Ringo;NN"),
+		"just tags":   invalidChain("/NN /VBZ"),
 	}
 
 	for desc, chain := range cases {
